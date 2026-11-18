@@ -60,6 +60,33 @@ services:
       - |
         echo '<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale">' > /usr/share/novnc/index.html
         exec /start_vnc.sh
+  livox:
+    build:
+      context: ./livox_lidar/
+      dockerfile: ./livox_lidar/Dockerfile.livox
+      args:
+        - USERNAME=jackal
+        - USER_UID=$USER_UID
+        - USER_GID=$USER_GID
+    image: registry.git.ee.ethz.ch/pbl/research/jackal/sensors/lidar:livox
+    privileged: true
+    container_name: lidar-livox
+    network_mode: "host"
+    ipc: "host"
+    command: "ros2 launch lidar_launch lidar.launch.py"
+    # command: "tail -f /dev/null"
+    environment: 
+      - USER=jackal
+      - HEALTH_TOPIC=/livox/lidar
+    volumes:
+      - /dev:/dev
+      - ./src/lidar_launch:/ws/src/lidar_launch
+    healthcheck:
+            test: ["CMD-SHELL", "/healthcheck.sh"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
 
 # Volume for build cache. Docker storage instead of host mounted
 # avoids corruption issues on VMs (MacOS). Also faster.

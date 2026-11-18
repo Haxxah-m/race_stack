@@ -1,0 +1,54 @@
+FROM ros:humble
+SHELL [ "/bin/bash", "-c" ]
+ARG USERNAME=foo
+ARG USER_UID=1
+ARG USER_GID=1
+ARG ROS_WS=/ws
+# install ros packages
+ARG DEBIAN_FRONTEND=noninteractive
+# ADD .docker_utils/humble_req.txt /.install_utils/linux_req.txt
+# RUN apt-get update && xargs apt-get install -y < /.install_utils/linux_req.txt
+
+RUN apt-get update && apt-get install -y \
+    git \
+    sudo \
+    ros-${ROS_DISTRO}-pcl-ros \
+        ros-${ROS_DISTRO}-pcl-conversions \
+    ros-${ROS_DISTRO}-rviz2
+    
+WORKDIR /tmp
+RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
+cd ./Livox-SDK2 && \
+mkdir build && \
+cd build && \
+cmake ..  && make -j && \
+make install
+
+RUN groupadd --gid ${USER_GID} ${USERNAME} \
+&& useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} \
+&& echo ${USERNAME} ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/${USERNAME} \
+&& chmod 0440 /etc/sudoers.d/${USERNAME}
+
+RUN mkdir -p ${ROS_WS}/src
+WORKDIR ${ROS_WS}
+RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git src/livox_ros_driver2
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && cd src/livox_ros_driver2 && ./build.sh humble
+COPY src/lidar_launch src/lidar_launch
+RUN source install/setup.bash && colcon build --packages-select lidar_launch --symlink-install
+# RUN git clone https://github.com/Tim-HW/Livox_cloud_undistortion_ROS2.git src/Livox_cloud_undistortion_ROS2
+# RUN source install/setup.bash && colcon build --packages-select deskew-livox --symlink-install
+
+
+RUN chown -R ${USERNAME} ${ROS_WS}
+COPY .docker_utils/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+RUN chown ${USERNAME} /entrypoint.sh
+COPY .docker_utils/healthcheck.sh /healthcheck.sh
+RUN chmod +x /healthcheck.sh
+RUN chown ${USERNAME} /healthcheck.sh
+
+USER ${USERNAME}
+RUN echo "export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH" >> ~/.bashrc
+RUN echo "source ${ROS_WS}/install/setup.bash" >> ~/.bashrc
+ENTRYPOINT [ "/entrypoint.sh" ]
+
